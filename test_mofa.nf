@@ -10,7 +10,12 @@ process MOFA_PREPARE {
     conda "bioconda::bioconductor-mofa2=1.16 conda-forge::r-base=4.4.3 bioconda::bioconductor-mofadata=1.22 conda-forge::r-data.table=1.17.0 conda-forge::r-ggplot2=3.5.1"
 
     input:
-    file input_files from params.file_list 
+    //file input_files from params.file_list 
+    tuple val(meta_drugs), path(drugs_data)
+    tuple val(meta_meth), path(meth_data)
+    tuple val(meta_mRNA), path(mRNA_data)
+    tuple val(meta_muta), path(muta_data)
+
 
     output:
     tuple val(meta), path("*.rds"), emit: prepared_data
@@ -25,25 +30,20 @@ process MOFA_PREPARE {
     library(data.table)
     library(ggplot2)
     library(tidyverse)
-    library(ComplexHeatmap)
-    library(vroom)
     
-    args <- commandArgs(trailingOnly=TRUE)
-    
-    for (file in args) {
-        data <- read.csv(file)
-        print(paste("Processing file:", file))
-        print(head(data))
-    }
+    table_drug <- read.table("$meta_drug")
+    table_meth <- read.table("$meta_meth")
+    table_mRNA <- read.table("$meta_mRNA")
+    table_muta <- read.table("$meta_muta")
 
     MOFA_LIST <- list()    
-    MOFA_LIST["mRNA"] <- mRNA_data
-    MOFA_LIST["Mutations"] <- muta_data    
-    MOFA_LIST["Methylation"] <- meth_data
-    MOFA_LIST["Drugs"] <- drugs_data
+    MOFA_LIST["mRNA"] <- table_drug
+    MOFA_LIST["Mutations"] <- table_meth    
+    MOFA_LIST["Methylation"] <- table_mRNA
+    MOFA_LIST["Drugs"] <- table_muta
 
     # Save prepared data
-    saveRDS(CLL_data, CLL_metadata file = "${meta.id}_prepared_data.rds")
+    saveRDS(MOFA_LIST file = "prepared_data.rds")
 
     # Create versions file
     writeLines(
@@ -105,16 +105,7 @@ process MOFA_PLOT {
     conda "bioconda::bioconductor-mofa2=1.16 conda-forge::r-base=4.4.3 bioconda::bioconductor-mofadata=1.22 conda-forge::r-data.table=1.17.0 conda-forge::r-ggplot2=3.5.1"
 
     input:
-    tuple valinput: 
-    path y 
-
-    output: 
-    stdout 
-
-    script: 
-    """
-    cat $y | tr '[a-z]' '[A-Z]'
-    """(meta), path(model)
+    tuple val(meta), path(model)
 
     output:
     tuple val(meta), path("*.pdf"), emit: plots
@@ -165,8 +156,13 @@ process MOFA_PLOT {
 } 
 
 workflow { 
-    prepare_ch = MOFA_PREPARE(file_list) 
-    run_ch = MOFA_RUN(prepare_ch())
-    plot_ch = MOFA_PLOT(run_ch) 
+    prepare_ch = MOFA_PREPARE(
+        params.drugs_data,
+        params.meth_data,
+        params.mRNA_data,
+        params.muta_data
+    ) 
+    run_ch = MOFA_RUN(MOFA_PREPARE.out.prepared_data)
+    plot_ch = MOFA_PLOT(MOFA_RUN.out.model) 
     plot_ch.view { it } 
 }
