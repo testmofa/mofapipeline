@@ -1,7 +1,7 @@
 #!/usr/bin/env nextflow
 
-Channel.fromPath('C:\Users\faria\OneDrive\Documentos\mofapipeline\test_mofa\*.csv') // Matches all .txt files in the "data" folder
-    .set { file_list }
+//Channel.fromPath('C:\Users\faria\OneDrive\Documentos\mofapipeline\test_mofa\*.csv') // Matches all .txt files in the "data" folder
+  //  .set { file_list }
 
 process MOFA_PREPARE {
     tag "$meta.id"
