@@ -1,6 +1,6 @@
 #!/usr/bin/env nextflow
 
-Channel.fromPath('/home/biome-ti/Área de Trabalho/test_mofa/*.csv') // Matches all .txt files in the "data" folder
+Channel.fromPath('C:\Users\faria\OneDrive\Documentos\mofapipeline\test_mofa\*.csv') // Matches all .txt files in the "data" folder
     .set { file_list }
 
 process MOFA_PREPARE {
