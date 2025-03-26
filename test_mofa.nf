@@ -4,46 +4,45 @@
   //  .set { file_list }
 
 process MOFA_PREPARE {
-    tag "$meta.id"
     label 'process_medium'
 
-    conda "bioconda::bioconductor-mofa2=1.16 conda-forge::r-base=4.4.3 bioconda::bioconductor-mofadata=1.22 conda-forge::r-data.table=1.17.0 conda-forge::r-ggplot2=3.5.1"
+    conda "conda-forge::r-base=4.4.1 bioconda::bioconductor-mofa2=1.16 bioconda::bioconductor-mofadata=1.22 conda-forge::r-data.table=1.17.0 conda-forge::r-ggplot2=3.5.1 conda-forge::r-tidyverse conda-forge::icu"
 
     input:
-    //file input_files from params.file_list 
-    tuple val(meta_drugs), path(drugs_data)
-    tuple val(meta_meth), path(meth_data)
-    tuple val(meta_mRNA), path(mRNA_data)
-    tuple val(meta_muta), path(muta_data)
+    //file input_files from params.file_list
+    path(drugs_data)
+    path(meth_data)
+    path(mRNA_data)
+    path(muta_data)
 
 
     output:
-    tuple val(meta), path("*.rds"), emit: prepared_data
+    path("*.rds"), emit: prepared_data
     path "versions.yml"           , emit: versions
 
     script:
     """
-    #!/usr/bin/env Rscript ${input_files}
+    #!/usr/bin/env Rscript
 
-    library(MOFA2)
-    library(MOFAdata)
-    library(data.table)
-    library(ggplot2)
-    library(tidyverse)
-    
-    table_drug <- read.table("$meta_drug")
-    table_meth <- read.table("$meta_meth")
-    table_mRNA <- read.table("$meta_mRNA")
-    table_muta <- read.table("$meta_muta")
+    library("MOFA2")
+    library("MOFAdata")
+    library("data.table")
+    library("ggplot2")
+    library("tidyverse")
 
-    MOFA_LIST <- list()    
+    table_drug <- read.table("$drugs_data")
+    table_meth <- read.table("$meth_data")
+    table_mRNA <- read.table("$mRNA_data")
+    table_muta <- read.table("$muta_data")
+
+    MOFA_LIST <- list()
     MOFA_LIST["mRNA"] <- table_drug
-    MOFA_LIST["Mutations"] <- table_meth    
+    MOFA_LIST["Mutations"] <- table_meth
     MOFA_LIST["Methylation"] <- table_mRNA
     MOFA_LIST["Drugs"] <- table_muta
 
     # Save prepared data
-    saveRDS(MOFA_LIST file = "prepared_data.rds")
+    saveRDS(MOFA_LIST, file = "prepared_data.rds")
 
     # Create versions file
     writeLines(
@@ -57,27 +56,26 @@ process MOFA_PREPARE {
 }
 
 process MOFA_RUN {
-    tag "$meta.id"
     label 'process_medium'
 
     conda "bioconda::bioconductor-mofa2=1.16 conda-forge::r-base=4.4.3 bioconda::bioconductor-mofadata=1.22 conda-forge::r-data.table=1.17.0 conda-forge::r-ggplot2=3.5.1"
 
     input:
-    tuple val(meta), path(prepared_data)
+    path(prepared_data)
 
     output:
-    tuple val(meta), path("*.rds") , emit: model
+    path("*.rds") , emit: model
     path "versions.yml"            , emit: versions
 
     script:
     def args = task.ext.args ?: ''
-    def prefix = task.ext.prefix ?: "${meta.id}"
+    // def prefix = task.ext.prefix ?: "${meta.id}"
     """
     #!/usr/bin/env Rscript
     library(MOFA2)
 
     # Load prepared data
-    data <- readRDS("${prepared_data}")
+    data <- readRDS("$prepared_data")
 
     # Create and train the MOFA model
     model <- create_mofa(data)
@@ -85,7 +83,7 @@ process MOFA_RUN {
     model <- run_mofa(model)
 
     # Save the model
-    saveRDS(model, file = "${prefix}_mofa_model.rds")
+    saveRDS(model, file = "mofa_model.rds")
 
     # Create versions file
     writeLines(
@@ -98,22 +96,21 @@ process MOFA_RUN {
     """
 }
 
-process MOFA_PLOT { 
-    tag "$meta.id"
+process MOFA_PLOT {
     label 'process_medium'
 
     conda "bioconda::bioconductor-mofa2=1.16 conda-forge::r-base=4.4.3 bioconda::bioconductor-mofadata=1.22 conda-forge::r-data.table=1.17.0 conda-forge::r-ggplot2=3.5.1"
 
     input:
-    tuple val(meta), path(model)
+    path(model)
 
     output:
-    tuple val(meta), path("*.pdf"), emit: plots
+    path("*.pdf"), emit: plots
     path "versions.yml"           , emit: versions
 
     script:
     def args = task.ext.args ?: ''
-    def prefix = task.ext.prefix ?: "${meta.id}"
+    // def prefix = task.ext.prefix ?: "${meta.id}"
     """
     #!/usr/bin/env Rscript
     library(MOFA2)
@@ -123,23 +120,23 @@ process MOFA_PLOT {
     model <- load_model("${model}")
 
     # Plot variance explained
-    pdf("${prefix}_variance_explained.pdf")
+    pdf("variance_explained.pdf")
     plot_variance_explained(model, max_r2 = 15)
     dev.off()
 
     # Plot factor correlations
-    pdf("${prefix}_factor_correlations.pdf")
+    pdf("factor_correlations.pdf")
     plot_factor_cor(model)
     dev.off()
 
     # Plot Top weights
-    pdf("${prefix}_weights.pdf")
+    pdf("weights.pdf")
     plot_top_weights(model, view = "Drugs",
     factor 1, nfeatures = 10, scale = T)
     dev.off()
 
     # Plot factors
-    pdf("${prefix}_factors.pdf")
+    pdf("factors.pdf")
     plot_factors(model, factors = 1:15)
     dev.off()
 
@@ -153,16 +150,15 @@ process MOFA_PLOT {
         "versions.yml"
     )
     """
-} 
+}
 
-workflow { 
+workflow {
     prepare_ch = MOFA_PREPARE(
-        params.drugs_data,
-        params.meth_data,
-        params.mRNA_data,
-        params.muta_data
-    ) 
+        file(params.drugs_data),
+        file(params.meth_data),
+        file(params.mRNA_data),
+        file(params.muta_data)
+    )
     run_ch = MOFA_RUN(MOFA_PREPARE.out.prepared_data)
-    plot_ch = MOFA_PLOT(MOFA_RUN.out.model) 
-    plot_ch.view { it } 
+    plot_ch = MOFA_PLOT(MOFA_RUN.out.model)
 }
